@@ -1,0 +1,1 @@
+"""RAG pipeline for the Legal AI Assistant."""
