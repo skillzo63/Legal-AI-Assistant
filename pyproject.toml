@@ -35,5 +35,5 @@ disallow_untyped_defs = true
 warn_return_any = true
 
 [[tool.mypy.overrides]]
-module = ["turbovec", "datasets"]
+module = ["turbovec", "datasets", "rank_bm25", "cohere"]
 ignore_missing_imports = true

@@ -4,24 +4,25 @@ import streamlit as st
 from groq import Groq
 
 from rag.config import settings
-from rag.errors import EmbeddingError
+from rag.errors import EmbeddingError, LLMError
+from rag.hybrid import HybridRetriever
 from rag.prompts import (
     LLM_UNAVAILABLE_MESSAGE,
     RETRIEVAL_UNAVAILABLE_MESSAGE,
     SYSTEM_PROMPT,
     route_mode,
 )
-from rag.retriever import LegalRetriever
 from rag.retry import retry_on_exception
+from rag.rewrite import rewrite_query
 
 st.set_page_config(page_title="Mike Ross | Legal AI", page_icon="⚖️", layout="centered")
 st.title("⚖️ Mike Ross Legal Assistant")
 
 
-@st.cache_resource  # Caches the index so it doesn't reload on every chat message
-def load_system() -> tuple[LegalRetriever, Groq]:
+@st.cache_resource
+def load_system() -> tuple[HybridRetriever, Groq]:
     """Load the retriever and LLM client once per session."""
-    return LegalRetriever.load(), Groq()
+    return HybridRetriever.load(), Groq()
 
 
 try:
@@ -63,11 +64,21 @@ if user_query := st.chat_input("Ask a legal question..."):
         st.markdown(user_query)
 
     # RAG retrieval — runs for every query, so an embedding outage degrades
-    # both legal and casual modes.
+    # both legal and casual modes. Multi-turn: rewrite follow-ups into a
+    # standalone query first so retrieval isn't fed a dangling pronoun.
     with st.spinner("Searching the archives..."):
         try:
-            results = retriever.search(user_query)
-        except EmbeddingError:
+            search_query = rewrite_query(
+                llm_client, user_query, st.session_state.messages
+            )
+        except LLMError:
+            # Rewrite is best-effort — fall back to the raw query rather than
+            # failing the whole turn.
+            search_query = user_query
+        try:
+            results = retriever.search(search_query)
+        except (EmbeddingError, LLMError):
+            # Embedding or rerank provider down → no trustworthy grounding.
             results = None
             retrieval_down = True
         else:

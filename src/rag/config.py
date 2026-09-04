@@ -29,7 +29,9 @@ class RetrievalSettings(BaseSettings):
         env_prefix="RETRIEVAL_", env_file=".env", extra="ignore"
     )
 
-    threshold: float = Field(0.65, ge=0.0, le=1.0)
+    # Minimum cross-encoder rerank score to keep an entry. Cohere scores are
+    # near-binary (relevant ~1.0, irrelevant ~0.0), so 0.5 cleanly splits them.
+    threshold: float = Field(0.5, ge=0.0, le=1.0)
     top_k: int = Field(3, ge=1)
 
 
@@ -38,10 +40,22 @@ class LLMSettings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="LLM_", env_file=".env", extra="ignore")
 
-    model: str = "llama-3.3-70b-versatile"
+    model: str = "qwen/qwen3.8-27b"
     temperature_legal: float = Field(0.0, ge=0.0, le=1.0)
     temperature_casual: float = Field(0.6, ge=0.0, le=1.0)
     max_tokens: int = Field(350, ge=1)
+
+
+class RerankSettings(BaseSettings):
+    """Hosted cross-encoder reranker (Cohere) settings."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="RERANK_", env_file=".env", extra="ignore"
+    )
+
+    model: str = "rerank-english-v3.0"
+    api_key: str = ""
+    candidate_pool: int = Field(50, ge=1)
 
 
 class IndexSettings(BaseSettings):
@@ -59,6 +73,7 @@ class Settings(BaseModel):
 
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
+    rerank: RerankSettings = Field(default_factory=RerankSettings)
     llm: LLMSettings = Field(default_factory=LLMSettings)
     index: IndexSettings = Field(default_factory=IndexSettings)
 
