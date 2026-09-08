@@ -48,7 +48,9 @@ class _FakeDenseIndex:
 @pytest.fixture(autouse=True)
 def _no_network(monkeypatch: pytest.MonkeyPatch) -> None:
     """Stub embedding and rerank so no API is called."""
-    monkeypatch.setattr(hybrid, "get_embedding_cached", lambda _t: (0.0, 0.0))
+    monkeypatch.setattr(
+        hybrid, "get_embedding_cached", lambda _t, task_type="RETRIEVAL_QUERY": (0.0, 0.0)
+    )
 
     def _fake_rerank(
         _query: str, candidates: list[dict[str, Any]], top_n: int | None = None

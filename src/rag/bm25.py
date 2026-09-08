@@ -2,7 +2,8 @@
 
 Complements dense retrieval: BM25 matches exact terms (statute names,
 section numbers) that embeddings blur into general meaning. Pure Python
-via ``rank-bm25`` — no index files, rebuilt from metadata at load time.
+via ``rank-bm25``, so there are no index files; the index is rebuilt from
+metadata at load time.
 """
 
 import re
@@ -14,7 +15,7 @@ _TOKEN_RE = re.compile(r"\w+")
 
 
 def _tokenize(text: str) -> list[str]:
-    """Lowercase word tokens. Deliberately simple — no stemming/stopwords.
+    """Lowercase word tokens. No stemming or stopwords on purpose.
 
     BM25's own term weighting already down-weights common words, so a
     plain word split is enough to catch the exact-term matches dense
@@ -37,12 +38,17 @@ class BM25Index:
 
     @classmethod
     def from_metadata(cls, metadata: list[dict[str, Any]]) -> "BM25Index":
-        """Build from retriever metadata, indexing the ``question`` field.
-
-        Questions-only keeps BM25 aligned with the dense index (which also
-        embeds questions), so the two rankings describe the same documents.
-        """
-        return cls([_tokenize(entry["question"]) for entry in metadata])
+        """Build from retriever metadata, indexing injected_text, text, or question."""
+        tokens = [
+            _tokenize(
+                entry.get("injected_text")
+                or entry.get("text")
+                or entry.get("question")
+                or ""
+            )
+            for entry in metadata
+        ]
+        return cls(tokens)
 
     def search(self, query_text: str, k: int) -> list[tuple[int, float]]:
         """Return the top-``k`` documents as ``(metadata_index, score)`` pairs.
@@ -53,7 +59,7 @@ class BM25Index:
 
         Returns:
             ``(index, score)`` pairs sorted by descending BM25 score. Scores
-            are BM25's own scale (unbounded, not comparable to cosine) — RRF
+            are BM25's own scale (unbounded, not comparable to cosine); RRF
             fusion uses only the resulting rank order, never these values.
         """
         scores = self._bm25.get_scores(_tokenize(query_text))

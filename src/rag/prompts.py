@@ -16,10 +16,12 @@ Read it carefully — it changes everything.
 
 ### Signal A — LEGAL MODE
 System sends: "Relevant knowledge retrieved for the current question"
-Rules:
-- Answer EXCLUSIVELY from the retrieved entries. No outside knowledge, no hallucinated cases.
-- Cite every claim: source name + URL.
-- Stay in Mike Ross voice: clear, confident, a little theatrical.
+Strict Grounding Rules:
+- Answer EXCLUSIVELY and STRICTLY from the retrieved entries provided below.
+- Do NOT extrapolate, speculate, or introduce external statutes, legal principles, case law, or facts not explicitly written in the retrieved text.
+- Every legal claim, ruling, or factual assertion you state must cite the corresponding citation from the excerpts.
+- If the retrieved text does not provide a complete answer or lacks specific details, state what the text says and explicitly note that the remaining details are not specified in the provided records.
+- Maintain Mike Ross's sharp, confident, analytical voice, but keep every single legal assertion 100% grounded in the text. Avoid ungrounded legal padding or conversational fluff that makes unverified claims.
 - Never echo the raw retrieval block back to the user.
 
 ### Signal B — CASUAL MODE
@@ -65,12 +67,12 @@ NO_LEGAL_CONTEXT_DIRECTIVE = {
 
 # User-facing degradation copy: LLM outage → explicit error; retrieval
 # outage → full outage for both modes (legal answers without grounding
-# would violate the hard-grounding promise).
+# would break the grounding guarantee).
 LLM_UNAVAILABLE_MESSAGE = (
     "The assistant is temporarily unavailable. Please try again in a moment."
 )
 RETRIEVAL_UNAVAILABLE_MESSAGE = (
-    "The Legal AI Assistant is temporarily degraded — the knowledge base is "
+    "The Legal AI Assistant is temporarily degraded: the knowledge base is "
     "unreachable. Please try again shortly."
 )
 
@@ -82,15 +84,33 @@ def build_legal_injection(results: list[dict[str, Any]]) -> dict[str, str]:
         results: Non-empty list of scored entries from ``HybridRetriever.search``.
 
     Returns:
-        A system message containing the retrieved Q&A pairs.
+        A system message containing the retrieved legal passages or Q&A pairs.
     """
-    context_str = "\n\n".join(
-        f"[Score: {r['rerank_score']}]\nQuestion: {r['question']}\nAnswer: {r['answer']}"
-        for r in results
-    )
+    entries = []
+    for r in results:
+        score = r.get("rerank_score", 1.0)
+        citation = r.get("citation") or r.get("source") or ""
+        url = r.get("url") or ""
+        passage = r.get("text") or r.get("clean_text") or ""
+        if passage:
+            header = f"[Citation: {citation} | Score: {score}]"
+            if url:
+                header += f" (URL: {url})"
+            entries.append(f"{header}\nLegal Passage: {passage}")
+        else:
+            entries.append(
+                f"[Score: {score}]\nQuestion: {r.get('question', '')}\nAnswer: {r.get('answer', '')}"
+            )
+
+    context_str = "\n\n".join(entries)
     return {
         "role": "system",
-        "content": f"Relevant knowledge retrieved for the current question:\n\n{context_str}",
+        "content": (
+            "Relevant knowledge retrieved for the current question.\n"
+            "STRICT GROUNDING DIRECTIVE: Rely ONLY on the explicit facts, legal tests, and statutory text "
+            "contained in the excerpts below. Do NOT state external legal rules or assume facts not explicitly provided.\n\n"
+            f"{context_str}"
+        ),
     }
 
 
@@ -104,7 +124,7 @@ def route_mode(
             relevant entries were found.
 
     Returns:
-        ``(system_message, temperature)`` — legal injection with a grounded
+        ``(system_message, temperature)``: legal injection with a grounded
         temperature when results exist, otherwise the casual directive with a
         looser temperature.
     """

@@ -40,7 +40,7 @@ def test_route_mode_without_results_is_casual() -> None:
 
 
 def test_route_mode_empty_list_is_casual() -> None:
-    """Empty results must behave exactly like None — same fallback mode."""
+    """Empty results must behave exactly like None: same fallback mode."""
     msg, _ = route_mode([])
     assert "NO_LEGAL_CONTEXT" in msg["content"]
 

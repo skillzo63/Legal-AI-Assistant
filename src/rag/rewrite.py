@@ -1,7 +1,7 @@
 """Multi-turn query rewriting.
 
 Follow-ups like "what about for businesses?" are meaningless to a retriever
-on their own — the subject lives in earlier turns. This rewrites the latest
+on their own; the subject lives in earlier turns. This rewrites the latest
 user message into a standalone question using recent history, so retrieval
 sees "Do business torts differ from personal torts?" instead of a dangling
 pronoun. First-turn queries need no rewrite and skip the LLM call.
@@ -16,7 +16,7 @@ from rag.retry import retry_on_exception
 _REWRITE_SYSTEM = (
     "You rewrite a user's latest message into a single standalone search "
     "query, resolving pronouns and references using the conversation history. "
-    "Output ONLY the rewritten query — no preamble, no quotes, no explanation. "
+    "Output ONLY the rewritten query: no preamble, no quotes, no explanation. "
     "If the message is already self-contained, return it unchanged."
 )
 

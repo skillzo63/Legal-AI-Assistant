@@ -1,6 +1,6 @@
 """Cross-encoder reranking via a hosted API (Cohere Rerank).
 
-Hybrid search (dense + BM25 + RRF) casts a wide, cheap net — good recall,
+Hybrid search (dense + BM25 + RRF) casts a wide, cheap net: good recall,
 rough ordering. A cross-encoder reads the query and each candidate *together*
 and scores the actual relationship, which the separately-embedded dense
 vectors never see. Too slow to run over the whole corpus, so it only sorts
@@ -8,6 +8,9 @@ the hybrid top-N down to the final few. Hosted (not local) to keep the
 deploy image free of PyTorch; the API key comes from ``RERANK_API_KEY``.
 """
 
+import logging
+import threading
+import time
 from typing import Any
 
 import cohere
@@ -16,7 +19,11 @@ from rag.config import settings
 from rag.errors import LLMError
 from rag.retry import retry_on_exception
 
+logger = logging.getLogger(__name__)
+
 _client: cohere.Client | None = None
+_rate_limit_lock = threading.Lock()
+_last_call_time = 0.0
 
 
 def _get_client() -> cohere.Client:
@@ -27,8 +34,22 @@ def _get_client() -> cohere.Client:
     return _client
 
 
-@retry_on_exception(exceptions=(Exception,))
+def _wait_for_rate_limit() -> None:
+    """Enforce minimum interval between calls to stay under the trial-key RPM limit."""
+    global _last_call_time
+    interval = settings.rerank.min_interval
+    if interval <= 0.0:
+        return
+    with _rate_limit_lock:
+        elapsed = time.time() - _last_call_time
+        if elapsed < interval:
+            time.sleep(interval - elapsed)
+        _last_call_time = time.time()
+
+
+@retry_on_exception(attempts=settings.rerank.max_retries)
 def _rerank(query_text: str, documents: list[str], top_n: int) -> list[tuple[int, float]]:
+    _wait_for_rate_limit()
     response = _get_client().rerank(
         model=settings.rerank.model,
         query=query_text,
@@ -54,7 +75,7 @@ def rerank(
         field added. Returns ``[]`` when given no candidates.
 
     Raises:
-        LLMError: The rerank call failed after retries.
+        LLMError: The rerank call failed after retries (or was fatal).
     """
     if not candidates:
         return []

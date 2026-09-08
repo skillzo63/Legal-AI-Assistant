@@ -63,7 +63,7 @@ if user_query := st.chat_input("Ask a legal question..."):
     with st.chat_message("user"):
         st.markdown(user_query)
 
-    # RAG retrieval — runs for every query, so an embedding outage degrades
+    # RAG retrieval - runs for every query, so an embedding outage degrades
     # both legal and casual modes. Multi-turn: rewrite follow-ups into a
     # standalone query first so retrieval isn't fed a dangling pronoun.
     with st.spinner("Searching the archives..."):
@@ -72,7 +72,7 @@ if user_query := st.chat_input("Ask a legal question..."):
                 llm_client, user_query, st.session_state.messages
             )
         except LLMError:
-            # Rewrite is best-effort — fall back to the raw query rather than
+            # Rewrite is best-effort - fall back to the raw query rather than
             # failing the whole turn.
             search_query = user_query
         try:

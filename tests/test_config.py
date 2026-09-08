@@ -47,7 +47,7 @@ def test_sections_are_independent(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_llm_temperature_bounds(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Out-of-range temperatures must be rejected — they're silent quality bugs."""
+    """Out-of-range temperatures must be rejected; they're silent quality bugs."""
     monkeypatch.setenv("LLM_TEMPERATURE_LEGAL", "1.7")
     with pytest.raises(ValidationError):
         LLMSettings()
