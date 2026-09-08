@@ -1,4 +1,4 @@
-"""Tests for the retry helper — fast, with zero delay."""
+"""Tests for the retry helper. Fast, with zero delay."""
 
 import pytest
 

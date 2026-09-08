@@ -1,4 +1,4 @@
-"""Typed exceptions for external-provider failures."""
+"""Typed exceptions for external-provider and pipeline failures."""
 
 
 class ProviderError(Exception):
@@ -11,3 +11,11 @@ class EmbeddingError(ProviderError):
 
 class LLMError(ProviderError):
     """Groq chat call failed after retries."""
+
+
+class RerankError(ProviderError):
+    """Cohere rerank call failed after retries."""
+
+
+class RetrievalError(Exception):
+    """Vector store or hybrid retrieval failure."""
