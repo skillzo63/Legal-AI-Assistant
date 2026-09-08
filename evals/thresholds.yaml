@@ -1,0 +1,23 @@
+# Eval gate thresholds; CI (M4) fails if any metric falls below these bars.
+# Calibrated against the 2026-09-08 chunk-level baseline (evals/report.json):
+#   recall@3 = 1.000 (40 samples), recall@1 = 0.600, MRR = 0.792,
+#   casual decline rate = 1.000 (5/5), 0 harness errors.
+# Bars sit just under baseline: tight enough to catch regressions,
+# loose enough for provider noise (RRF fusion + rerank variance).
+#
+# Latency is NOT gated: the Cohere trial key throttles rerank to ~10 RPM,
+# so ~6.2s/query is a rate-limit artifact, not a system property.
+
+retrieval:
+  recall_at_3: 0.95
+  mrr: 0.75
+
+faithfulness:
+  min_faithfulness: 0.75
+  # A made-up case citation is the costlier failure for a legal RAG; keep this bar high.
+  # Gate only applies when the run produced >= 1 citation (checked in code).
+  min_citation_precision: 0.90
+
+casual_mode:
+  # Grounding contract: off-corpus queries must decline.
+  min_decline_rate: 0.80

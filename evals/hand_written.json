@@ -1,0 +1,77 @@
+[
+  {
+    "query": "What are the grounds for appealing a magistrate's decision in New South Wales?",
+    "expected_answer": "An appeal from a magistrate's decision can generally be made on questions of law, and in some cases on questions of fact, to the District Court or Supreme Court depending on the matter.",
+    "category": "clear_legal"
+  },
+  {
+    "query": "In Australian law, what constitutes a valid contract?",
+    "expected_answer": "A valid contract requires offer, acceptance, consideration, and intention to create legal relations. Both parties must have legal capacity.",
+    "category": "clear_legal"
+  },
+  {
+    "query": "What is the standard of proof required in a criminal trial in Australia?",
+    "expected_answer": "In criminal trials, the prosecution must prove its case beyond reasonable doubt.",
+    "category": "clear_legal"
+  },
+  {
+    "query": "What rights does a tenant have if a landlord fails to make urgent repairs in Queensland?",
+    "expected_answer": "Tenants in Queensland may be entitled to arrange urgent repairs themselves and seek reimbursement, or apply to QCAT for orders requiring the landlord to make repairs.",
+    "category": "clear_legal"
+  },
+  {
+    "query": "Can a director of an insolvent company be personally liable for company debts in Australia?",
+    "expected_answer": "Yes, under insolvent trading provisions in the Corporations Act, a director can be personally liable if they allow a company to incur debts while insolvent.",
+    "category": "clear_legal"
+  },
+  {
+    "query": "What remedies are available when a contract is breached?",
+    "expected_answer": "Remedies for breach of contract include damages, specific performance, injunction, and rescission depending on the nature and severity of the breach.",
+    "category": "ambiguous_legal"
+  },
+  {
+    "query": "How does Australian courts treat implied terms in employment contracts?",
+    "expected_answer": "Australian courts recognise implied terms such as mutual trust and confidence, good faith in some jurisdictions, and terms implied by statute or custom.",
+    "category": "ambiguous_legal"
+  },
+  {
+    "query": "What happens to a will if the testator gets divorced after making it?",
+    "expected_answer": "In most Australian jurisdictions, divorce revokes gifts to an ex-spouse and their appointment as executor, but does not revoke the entire will.",
+    "category": "ambiguous_legal"
+  },
+  {
+    "query": "Is verbal evidence admissible in Australian civil proceedings?",
+    "expected_answer": "Yes, oral testimony is admissible subject to the rules of evidence, including relevance and reliability requirements under the uniform Evidence Acts.",
+    "category": "ambiguous_legal"
+  },
+  {
+    "query": "What is the legal position on fair use of copyrighted material in Australia?",
+    "expected_answer": "Australia does not have a fair use doctrine. It has fair dealing exceptions for specific purposes such as research, criticism, news reporting, and parody.",
+    "category": "ambiguous_legal"
+  },
+  {
+    "query": "Hey Mike, what's Harvey up to these days?",
+    "expected_answer": "This is a casual Suits character question — should be handled in casual mode.",
+    "category": "casual"
+  },
+  {
+    "query": "Can you recommend a good legal thriller to read?",
+    "expected_answer": "Off-topic casual question — should engage in casual mode.",
+    "category": "casual"
+  },
+  {
+    "query": "What's the airspeed velocity of an unladen swallow?",
+    "expected_answer": "Completely off-topic — should engage in casual mode without legal refusal.",
+    "category": "casual"
+  },
+  {
+    "query": "I had a dispute with my neighbour — any general advice?",
+    "expected_answer": "Intentionally vague legal request — may or may not retrieve context. Should gracefully handle either mode.",
+    "category": "casual"
+  },
+  {
+    "query": "How do I file a lawsuit?",
+    "expected_answer": "Broad procedural question — may retrieve some context or fall to casual mode with a polite decline.",
+    "category": "casual"
+  }
+]
