@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true   # download LFS files (index artifacts) at checkout
 
       - uses: actions/setup-python@v5
         with:
@@ -31,24 +33,18 @@ jobs:
       - name: Unit tests
         run: pytest -q
 
-      # ── Eval gate: retrieval quality on a cached index ──────────────────────
-      # The vector index is an artifact, not source: cache it keyed on the
-      # code that produces it. A cache hit skips the Gemini embedding calls
-      # entirely; a miss rebuilds (needs GEMINI_API_KEY secret).
-      - name: Restore index cache
-        id: index-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            aus_legal_qa.tv
-            aus_legal_qa.faiss
-            metadata.json
-          key: index-${{ hashFiles('src/rag/chunker.py', 'src/rag/indexer.py', 'src/rag/vector_store.py', 'requirements.txt') }}
-
-      - name: Build index (cache miss only)
-        if: steps.index-cache.outputs.cache-hit != 'true'
+      # ── Eval gate ────────────────────────────────────────────────────────────
+      # Index files (aus_legal_qa.tv, aus_legal_qa.faiss, metadata.json) are
+      # stored in Git LFS and downloaded automatically by the checkout step
+      # above. The rebuild step below is skipped by default (skip-rebuild=true)
+      # but can be forced by setting the FORCE_REBUILD secret/variable to 'true'
+      # when you want to regenerate the index in CI (e.g. after a chunker change
+      # that you haven't rebuilt locally yet).
+      - name: Rebuild index (forced only)
+        if: vars.FORCE_REBUILD == 'true'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
         run: python -m rag.indexer
 
       - name: Eval gate (retrieval + casual mode)

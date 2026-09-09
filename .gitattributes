@@ -1,0 +1,6 @@
+# Git LFS tracking rules for large binary index artifacts.
+# These files are pre-built locally and stored in LFS so CI never needs
+# to call the Gemini embedding API to rebuild the index.
+aus_legal_qa.tv filter=lfs diff=lfs merge=lfs -text
+aus_legal_qa.faiss filter=lfs diff=lfs merge=lfs -text
+metadata.json filter=lfs diff=lfs merge=lfs -text
