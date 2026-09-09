@@ -52,4 +52,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           RERANK_API_KEY: ${{ secrets.RERANK_API_KEY }}
+          EVAL_JUDGE_API_KEY: ${{ secrets.EVAL_JUDGE_API_KEY }}
+          EVAL_JUDGE_BASE_URL: ${{ secrets.EVAL_JUDGE_BASE_URL }}
+          EVAL_JUDGE_MODEL: ${{ secrets.EVAL_JUDGE_MODEL }}
         run: python -m evals.run_eval --ci
