@@ -11,3 +11,7 @@ cohere==5.13.11
 openai==3.8.0
 pyyaml==6.0.3
 faiss-cpu==1.15.0
+fastapi==0.115.8
+uvicorn==0.34.0
+prometheus-client==0.21.1
+requests==2.32.3
