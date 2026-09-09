@@ -75,6 +75,8 @@ Stage one casts a wide, cheap net (dense + BM25 → fused pool). Stage two is th
 - **Typed degradation.** Provider errors (`EmbeddingError`, `LLMError`) surface as explicit user-facing messages rather than silent failures or invented answers. Rewrite failure degrades gracefully to the raw query.
 - **Config, not constants.** Every tunable (models, threshold, top-k, candidate pool, temperatures) is env-driven via `pydantic-settings` with validation bounds. Nothing is hardcoded in pipeline code.
 - **Classified retries.** All provider calls route through one retry helper that classifies exceptions first: auth errors fail fast, rate limits back off longer, transients retry with jitter.
+- **Serving + observability.** A FastAPI service owns the pipeline: stateless `/chat` streaming over SSE, `/search` for debugging retrieval, shallow `/health`, Prometheus metrics on `/metrics` (request counts, latency histograms, legal/casual mode split, pipeline error counts). The UI is a thin client of the service; failures surface as SSE error events with user-facing degradation copy, never a bare 500 mid-stream.
+- **CI with a quality gate.** Lint, type-check, and unit tests on every PR; a retrieval eval gate against a cached index fails the build on quality regressions (exit code 1), and provider outages during the run fail it loudly as harness errors (exit code 2).
 - **Tested & typed.** `pytest` suite runs with zero network calls (collaborators are faked); `mypy --strict` clean; `ruff` clean.
 
 ---
@@ -114,15 +116,30 @@ python -m rag.indexer
 ```
 Downloads the [Open Australian Legal QA](https://huggingface.co/datasets/isaacus/open-australian-legal-qa) dataset, chunks each record's `source.text` on legal structural boundaries, embeds the chunks (batched, Gemini), and writes `aus_legal_qa.tv` + `aus_legal_qa.faiss` + `metadata.json`. Pass `--max-records 0` for the full dataset (2,124 documents -> ~3.6k chunks). BM25 is rebuilt in memory from the metadata at load time.
 
-### 4. Run the app
+### 4. Run the API and the UI
+
 ```bash
-streamlit run app.py
+uvicorn src.api.main:app --port 8000    # the service (start this first)
+streamlit run app.py                    # the chat UI, a client of the API
 ```
+
+The Streamlit app is a thin client over the FastAPI service: history lives in the browser session, every turn is a POST to `/chat` whose SSE stream renders token by token. The API itself is stateless.
+
+Endpoints: `POST /chat` (SSE stream: retrieving → mode → tokens → done), `POST /search` (retrieval-only, no LLM call), `GET /health` (shallow liveness), `GET /metrics` (Prometheus text format: request counts, latency histograms, mode split, pipeline errors).
 
 ### 5. Run the checks
 ```bash
-pytest && ruff check src tests app.py && mypy
+pytest && ruff check . && mypy
 ```
+
+CI runs the same chain on every PR and push to main, plus a retrieval eval gate: the vector index is cached (keyed on the chunker/indexer source), a cache miss rebuilds it, and `python -m evals.run_eval --ci` fails the build on any quality regression. LLM-judge evals (faithfulness, citation precision) run locally against main, where a human decides whether the numbers moved.
+
+### 6. Docker (optional)
+```bash
+docker build -t legal-rag .
+docker run -p 8000:8000 -v "$PWD:/data" legal-rag
+```
+Multi-stage build on `python:3.12-slim`, non-root user, healthcheck on `/health`. Index artifacts are mounted at `/data`, not baked into the image.
 
 ## Project structure
 
@@ -142,6 +159,13 @@ Legal-AI-Assistant/
 │   ├── prompts.py      # Mike Ross persona, two-mode routing, degradation copy
 │   ├── retry.py        # classified retry helper (fatal / rate-limit / transient)
 │   └── errors.py       # typed provider exceptions
+├── src/api/
+│   ├── main.py         # app factory + lifespan (index loaded once)
+│   ├── routes.py       # /chat SSE, /search, /health
+│   ├── sse.py          # event protocol + chat stream generator
+│   ├── schemas.py      # Pydantic request/response models
+│   ├── state.py        # AppState: retriever + LLM client shared by requests
+│   └── metrics.py      # Prometheus middleware and counters
 ├── evals/
 │   ├── config.py       # eval settings (judge endpoint, golden-set size)
 │   ├── golden_set.py   # seeded auto samples + hand-written queries
@@ -150,8 +174,10 @@ Legal-AI-Assistant/
 │   ├── faithfulness_eval.py # claim-level faithfulness, citation precision, casual mode
 │   ├── run_eval.py     # orchestrator; report.json, threshold gates, exit codes
 │   └── thresholds.yaml # regression bars, calibrated from baseline runs
-├── app.py              # Streamlit UI
+├── app.py              # Streamlit chat UI (thin SSE client of the API)
 ├── tests/              # pytest suite (no network calls)
+├── .github/workflows/  # CI: lint -> type-check -> test -> eval gate
+├── Dockerfile          # multi-stage, non-root, healthchecked
 ├── requirements.txt / requirements-dev.txt
 └── .env                # API keys (gitignored)
 ```
