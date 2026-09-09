@@ -299,7 +299,17 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Max samples for faithfulness (default: all)",
     )
+    parser.add_argument(
+        "--ci",
+        action="store_true",
+        help="CI mode: retrieval-only, smaller sample set, terse logging",
+    )
     args = parser.parse_args(argv)
+
+    if args.ci:
+        # CI runs the cheap, deterministic gate; LLM-judge evals stay manual.
+        args.retrieval_only = True
+        args.samples = min(args.samples, 40)
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
