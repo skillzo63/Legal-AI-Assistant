@@ -1,53 +1,49 @@
-"""Streamlit chat UI for the Mike Ross legal assistant."""
+"""Streamlit chat UI for the Mike Ross legal assistant.
 
+Thin client over the FastAPI service: every turn is a POST to /chat whose
+SSE stream is rendered token by token. Conversation history lives in the
+Streamlit session and is sent with each request; the API itself is
+stateless. Run the API first: uvicorn src.api.main:app --port 8000
+"""
+
+import json
+
+import requests
 import streamlit as st
-from groq import Groq
 
-from rag.config import settings
-from rag.errors import EmbeddingError, LLMError
-from rag.hybrid import HybridRetriever
-from rag.prompts import (
-    LLM_UNAVAILABLE_MESSAGE,
-    RETRIEVAL_UNAVAILABLE_MESSAGE,
-    SYSTEM_PROMPT,
-    route_mode,
-)
-from rag.retry import retry_on_exception
-from rag.rewrite import rewrite_query
+# 127.0.0.1, not localhost: skips IPv6 (::1) resolution flakes on Windows.
+API_URL = "http://127.0.0.1:8000"
 
 st.set_page_config(page_title="Mike Ross | Legal AI", page_icon="⚖️", layout="centered")
 st.title("⚖️ Mike Ross Legal Assistant")
 
 
-@st.cache_resource
-def load_system() -> tuple[HybridRetriever, Groq]:
-    """Load the retriever and LLM client once per session."""
-    return HybridRetriever.load(), Groq()
+def parse_sse_stream(response: requests.Response) -> list[tuple[str, dict]]:
+    """Yield (event, data) frames from an SSE response as they arrive.
 
-
-try:
-    retriever, llm_client = load_system()
-except Exception:
-    # Index or metadata unreachable → full outage for both modes.
-    st.error(RETRIEVAL_UNAVAILABLE_MESSAGE)
-    st.stop()
-
-
-@retry_on_exception()
-def _start_stream(payload: list[dict[str, str]], temperature: float):
-    """Open the Groq streaming completion, retrying connection failures."""
-    return llm_client.chat.completions.create(
-        model=settings.llm.model,
-        messages=payload,
-        stream=True,
-        temperature=temperature,
-        max_tokens=settings.llm.max_tokens,
-    )
+    The stream is consumed line by line so tokens render live; frames are
+    buffered per SSE block (blank line terminated).
+    """
+    event = ""
+    data_lines: list[str] = []
+    for line in response.iter_lines(decode_unicode=True):
+        if line is None:
+            continue
+        if line == "":
+            if event:
+                yield event, json.loads("".join(data_lines))
+            event, data_lines = "", []
+            continue
+        if line.startswith("event: "):
+            event = line.removeprefix("event: ").strip()
+        elif line.startswith("data: "):
+            data_lines.append(line.removeprefix("data: "))
+    if event and data_lines:
+        yield event, json.loads("".join(data_lines))
 
 
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
         {
             "role": "assistant",
             "content": "What are we looking at today? I've got my photographic memory ready.",
@@ -55,63 +51,70 @@ if "messages" not in st.session_state:
     ]
 
 for msg in st.session_state.messages:
-    if msg["role"] != "system":
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+
+
+def _api_history() -> list[dict[str, str]]:
+    """Session history in the API's ChatRequest shape (no system prompt)."""
+    return [
+        {"role": m["role"], "content": m["content"]}
+        for m in st.session_state.messages
+        if m["role"] in ("user", "assistant")
+    ]
+
+
+def render_chat(query: str) -> None:
+    """POST the turn to /chat and render the SSE stream as it arrives."""
+    with st.chat_message("assistant"):
+        placeholder = st.empty()
+        reply = ""
+        try:
+            response = requests.post(
+                f"{API_URL}/chat",
+                json={"query": query, "history": _api_history()},
+                stream=True,
+                timeout=120,
+            )
+        except requests.RequestException:
+            placeholder.markdown(
+                "The assistant service is not reachable. Is the API running? "
+                "Start it with: `uvicorn src.api.main:app --port 8000`"
+            )
+            st.session_state.messages.append(
+                {"role": "assistant", "content": "Service unreachable."}
+            )
+            return
+        if response.status_code != 200:
+            # The API answered with an error status; show what it said rather
+            # than pretending the connection failed (503 = degraded startup).
+            try:
+                detail = response.json().get("detail", response.text[:200])
+            except ValueError:
+                detail = response.text[:200]
+            placeholder.markdown(f"The API returned {response.status_code}: {detail}")
+            st.session_state.messages.append(
+                {"role": "assistant", "content": f"API error ({response.status_code})."}
+            )
+            return
+
+        for event, data in parse_sse_stream(response):
+            if event == "token":
+                reply += data["text"]
+                placeholder.markdown(reply + "▌")
+            elif event == "error":
+                placeholder.markdown(data["message"])
+                reply = data["message"]
+                break
+            elif event == "done":
+                reply = data["answer"]
+        placeholder.markdown(reply)
+
+    st.session_state.messages.append({"role": "user", "content": query})
+    st.session_state.messages.append({"role": "assistant", "content": reply})
+
 
 if user_query := st.chat_input("Ask a legal question..."):
     with st.chat_message("user"):
         st.markdown(user_query)
-
-    # RAG retrieval - runs for every query, so an embedding outage degrades
-    # both legal and casual modes. Multi-turn: rewrite follow-ups into a
-    # standalone query first so retrieval isn't fed a dangling pronoun.
-    with st.spinner("Searching the archives..."):
-        try:
-            search_query = rewrite_query(
-                llm_client, user_query, st.session_state.messages
-            )
-        except LLMError:
-            # Rewrite is best-effort - fall back to the raw query rather than
-            # failing the whole turn.
-            search_query = user_query
-        try:
-            results = retriever.search(search_query)
-        except (EmbeddingError, LLMError):
-            # Embedding or rerank provider down → no trustworthy grounding.
-            results = None
-            retrieval_down = True
-        else:
-            retrieval_down = False
-
-    with st.chat_message("assistant"):
-        if retrieval_down:
-            st.markdown(RETRIEVAL_UNAVAILABLE_MESSAGE)
-            st.session_state.messages.append({"role": "user", "content": user_query})
-            st.session_state.messages.append(
-                {"role": "assistant", "content": RETRIEVAL_UNAVAILABLE_MESSAGE}
-            )
-            st.stop()
-
-        mode_msg, temperature = route_mode(results)
-        payload = st.session_state.messages.copy()
-        payload.append(mode_msg)
-        payload.append({"role": "user", "content": user_query})
-
-        response_placeholder = st.empty()
-        reply = ""
-        try:
-            stream = _start_stream(payload, temperature)
-            for chunk in stream:
-                delta = chunk.choices[0].delta.content or ""
-                reply += delta
-                response_placeholder.markdown(reply + "▌")
-        except Exception:
-            # LLM outage → explicit error message.
-            st.error(LLM_UNAVAILABLE_MESSAGE)
-            st.stop()
-
-        response_placeholder.markdown(reply)
-
-    st.session_state.messages.append({"role": "user", "content": user_query})
-    st.session_state.messages.append({"role": "assistant", "content": reply})
+    render_chat(user_query)
